@@ -57,6 +57,30 @@ static ut64 get_import_addr_mips(ELFOBJ *bin, RzBinElfReloc *rel) {
 	return plt_addr;
 }
 
+static ut64 get_import_addr_hppa(ELFOBJ *bin, RzBinElfReloc *rel) {
+	ut64 plt_addr;
+
+	if (!Elf_(rz_bin_elf_get_dt_info)(bin, DT_PLTGOT, &plt_addr)) {
+		return UT64_MAX;
+	}
+
+	ut64 p_plt_addr = Elf_(rz_bin_elf_v2p)(bin, plt_addr);
+	if (p_plt_addr == UT64_MAX) {
+		return UT64_MAX;
+	}
+
+	ut32 tmp;
+	if (!rz_buf_read_ble32_at(bin->b, p_plt_addr, &tmp, bin->big_endian)) {
+		return UT64_MAX;
+	}
+
+	ut64 pos = COMPUTE_PLTGOT_POSITION(rel, plt_addr, 0x0);
+	ut64 base = tmp;
+
+	base += (pos * 16);
+	return base;
+}
+
 /**
  * \brief Determines and returns the import address for the given relocation
  * for the Hexagon architecture.
@@ -286,6 +310,8 @@ static ut64 get_import_addr_aux(ELFOBJ *bin, RzBinElfReloc *reloc) {
 		return get_import_addr_arm(bin, reloc);
 	case EM_MIPS: // MIPS32 BIG ENDIAN relocs
 		return get_import_addr_mips(bin, reloc);
+	case EM_PARISC:
+		return get_import_addr_hppa(bin, reloc);
 	case EM_RISCV:
 		return get_import_addr_riscv(bin, reloc);
 	case EM_SPARC:
