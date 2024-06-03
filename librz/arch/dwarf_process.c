@@ -1924,7 +1924,7 @@ static RzBinDwarfLocation *location_by_biggest_range(const RzBinDwarfLocList *lo
 	return biggest_range_loc;
 }
 
-static bool RzBinDwarfLocation_as_RzAnalysisVarStorage(
+static bool location_as_var_storage(
 	RzAnalysis *a, RzAnalysisFunction *f,
 	RzAnalysisDwarfVariable *dw_var, RzBinDwarfLocation *loc,
 	RzAnalysisVar *var, RzAnalysisVarStorage *storage) {
@@ -1969,7 +1969,7 @@ static bool RzBinDwarfLocation_as_RzAnalysisVarStorage(
 			if (!sto) {
 				goto clean_composite;
 			}
-			RzBinDwarfLocation_as_RzAnalysisVarStorage(a, f, dw_var, piece->location, var, sto);
+			location_as_var_storage(a, f, dw_var, piece->location, var, sto);
 			RzAnalysisVarStoragePiece p = {
 				.offset_in_bits = piece->bit_offset,
 				.size_in_bits = piece->size_in_bits,
@@ -1994,7 +1994,7 @@ static bool RzBinDwarfLocation_as_RzAnalysisVarStorage(
 		if (!biggest_range_loc) {
 			break;
 		}
-		if (RzBinDwarfLocation_as_RzAnalysisVarStorage(a, f, dw_var, biggest_range_loc, var, storage)) {
+		if (location_as_var_storage(a, f, dw_var, biggest_range_loc, var, storage)) {
 			break;
 		}
 		break;
@@ -2013,21 +2013,34 @@ static bool RzAnalysisDwarfVariable_as_RzAnalysisVar(RzAnalysis *a, RzAnalysisFu
 	var->kind = DW_var->kind;
 	var->fcn = f;
 	var->origin.kind = RZ_ANALYSIS_VAR_ORIGIN_DWARF;
-	return RzBinDwarfLocation_as_RzAnalysisVarStorage(a, f, DW_var, loc, var, &var->storage);
+	return location_as_var_storage(a, f, DW_var, loc, var, &var->storage);
 }
 
 static bool dwarf_integrate_function(void *user, const ut64 k, const void *value) {
 	RzAnalysis *analysis = user;
 	const RzAnalysisDwarfFunction *dw_fn = value;
 	RzAnalysisFunction *fn = rz_analysis_get_function_at(analysis, dw_fn->low_pc);
-	if (!fn) {
-		return true;
-	}
+	if (!fn && dw_fn->prefer_name) {
+		char *dwf_name = rz_str_newf("dbg.%s", dw_fn->prefer_name);
+		fn = rz_analysis_create_function(
+			analysis, dwf_name, dw_fn->low_pc, RZ_ANALYSIS_FCN_TYPE_FCN);
+		free(dwf_name);
+		if (!fn) {
+			return true;
+		}
+		fn->ret_type = rz_type_clone(dw_fn->ret_type);
 
-	if (dw_fn->prefer_name && !rz_str_startswith(dw_fn->prefer_name, "anonymous")) {
+		RzAnalysisBlock *blk = rz_analysis_create_block(analysis, dw_fn->low_pc, dw_fn->high_pc - dw_fn->low_pc);
+		if (!blk) {
+			return true;
+		}
+		rz_analysis_function_add_block(fn, blk);
+	} else if (dw_fn->prefer_name && !rz_str_startswith(dw_fn->prefer_name, "anonymous") && !rz_str_startswith(fn->name, "dbg.")) {
 		char *dwf_name = rz_str_newf("dbg.%s", dw_fn->prefer_name);
 		rz_analysis_function_rename((RzAnalysisFunction *)fn, dwf_name);
 		free(dwf_name);
+	} else {
+		return true;
 	}
 
 	RzAnalysisDwarfVariable *dw_var;

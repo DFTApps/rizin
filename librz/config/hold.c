@@ -133,12 +133,18 @@ RZ_API void rz_config_hold_restore(RzConfigHold *h) {
 	RzListIter *iter;
 	RzConfigHoldChar *hchar;
 	RzConfigHoldNum *hnum;
-	if (h) {
-		RzConfig *cfg = h->cfg;
-		rz_list_foreach (h->list_num, iter, hnum) {
+	if (!h)
+		return;
+	RzConfig *cfg = h->cfg;
+	rz_list_foreach (h->list_num, iter, hnum) {
+		ut64 prev = rz_config_get_i(cfg, hnum->key);
+		if (prev != hnum->value) {
 			(void)rz_config_set_i(cfg, hnum->key, hnum->value);
 		}
-		rz_list_foreach (h->list_char, iter, hchar) {
+	}
+	rz_list_foreach (h->list_char, iter, hchar) {
+		const char *prev = rz_config_get(cfg, hchar->key);
+		if (RZ_STR_NE(prev, hchar->value)) {
 			(void)rz_config_set(cfg, hchar->key, hchar->value);
 		}
 	}

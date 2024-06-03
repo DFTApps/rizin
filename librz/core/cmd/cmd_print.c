@@ -11,8 +11,6 @@
 #include "../core_private.h"
 #include "rz_util/rz_strbuf.h"
 
-#define PF_USAGE_STR "pf[.k[.f[=v]]|[v]]|[n]|[0|cnt][fmt] [a0 a1 ...]"
-
 static const char *help_msg_at[] = {
 	"Usage: [.][#]<cmd>[*] [`cmd`] [@ addr] [~grep] [|syscmd] [>[>]file]", "", "",
 	"0", "", "alias for 's 0'",

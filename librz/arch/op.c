@@ -21,18 +21,17 @@ RZ_API RzList /*<RzAnalysisOp *>*/ *rz_analysis_op_list_new(void) {
 }
 
 RZ_API void rz_analysis_op_init(RzAnalysisOp *op) {
-	if (op) {
-		memset(op, 0, sizeof(*op));
-		op->addr = UT64_MAX;
-		op->jump = UT64_MAX;
-		op->fail = UT64_MAX;
-		op->ptr = UT64_MAX;
-		op->refptr = 0;
-		op->val = UT64_MAX;
-		op->disp = UT64_MAX;
-		op->mmio_address = UT64_MAX;
-		op->stackptr = RZ_ANALYSIS_OP_INVALID_STACKPTR;
-	}
+	if (!op)
+		return;
+	memset(op, 0, sizeof(*op));
+	op->addr = UT64_MAX;
+	op->jump = UT64_MAX;
+	op->fail = UT64_MAX;
+	op->ptr = UT64_MAX;
+	op->val = UT64_MAX;
+	op->disp = UT64_MAX;
+	op->mmio_address = UT64_MAX;
+	op->stackptr = RZ_ANALYSIS_OP_INVALID_STACKPTR;
 }
 
 RZ_API bool rz_analysis_op_fini(RzAnalysisOp *op) {
@@ -42,20 +41,14 @@ RZ_API bool rz_analysis_op_fini(RzAnalysisOp *op) {
 	rz_analysis_value_free(op->src[0]);
 	rz_analysis_value_free(op->src[1]);
 	rz_analysis_value_free(op->src[2]);
-	op->src[0] = NULL;
-	op->src[1] = NULL;
-	op->src[2] = NULL;
 	rz_analysis_value_free(op->dst);
-	op->dst = NULL;
+	rz_il_op_effect_free(op->il_op);
 	rz_list_free(op->access);
-	op->access = NULL;
 	rz_strbuf_fini(&op->opex);
 	rz_strbuf_fini(&op->esil);
 	rz_analysis_switch_op_free(op->switch_op);
-	op->switch_op = NULL;
-	RZ_FREE(op->mnemonic);
-	rz_il_op_effect_free(op->il_op);
-	op->il_op = NULL;
+	free(op->mnemonic);
+	memset(op, 0, sizeof(RzAnalysisOp));
 	return true;
 }
 
@@ -64,7 +57,6 @@ RZ_API void rz_analysis_op_free(void *op) {
 		return;
 	}
 	rz_analysis_op_fini(op);
-	memset(op, 0, sizeof(RzAnalysisOp));
 	free(op);
 }
 
@@ -112,10 +104,10 @@ RZ_API int rz_analysis_op(RZ_NONNULL RzAnalysis *analysis, RZ_OUT RzAnalysisOp *
 
 	rz_analysis_op_init(op);
 	int ret = RZ_MIN(2, len);
-	if (len > 0 && analysis->cur && analysis->cur->op) {
+	if (analysis->cur && analysis->cur->op) {
 		// use core binding to set asm.bits correctly based on the addr
 		// this is because of the hassle of arm/thumb
-		if (analysis && analysis->coreb.archbits) {
+		if (analysis->coreb.archbits) {
 			analysis->coreb.archbits(analysis->coreb.core, addr);
 		}
 		if (analysis->pcalign && addr % analysis->pcalign) {

@@ -79,7 +79,8 @@ RZ_API void rz_analysis_reflines_free(RzAnalysisRefline *rl) {
  * nlines - max number of lines of code to consider
  * linesout - true if you want to display lines that go outside of the scope [addr;addr+len)
  * linescall - true if you want to display call lines */
-RZ_API RzList /*<RzAnalysisRefline *>*/ *rz_analysis_reflines_get(RzAnalysis *analysis, ut64 addr, const ut8 *buf, ut64 len, int nlines, int linesout, int linescall) {
+RZ_API RzList /*<RzAnalysisRefline *>*/ *rz_analysis_reflines_get(RzAnalysis *analysis, ut64 addr, const ut8 *buf, ut64 len,
+	int nlines, int linesout, int linescall) {
 	RzList *list, *sten;
 	RzListIter *iter;
 	RzAnalysisOp op = { 0 };
@@ -90,7 +91,6 @@ RZ_API RzList /*<RzAnalysisRefline *>*/ *rz_analysis_reflines_get(RzAnalysis *an
 	int sz = 0, count = 0;
 	ut64 opc = addr;
 
-	memset(&op, 0, sizeof(op));
 	/*
 	 * 1) find all reflines
 	 * 2) sort "from"s and "to"s in a list
@@ -123,33 +123,31 @@ RZ_API RzList /*<RzAnalysisRefline *>*/ *rz_analysis_reflines_get(RzAnalysis *an
 			break;
 		}
 		addr += sz;
-		{
-			RzPVector *metas = rz_meta_get_all_at(analysis, addr);
-			if (metas) {
-				void **it;
-				ut64 skip = 0;
-				rz_pvector_foreach (metas, it) {
-					RzIntervalNode *node = *it;
-					RzAnalysisMetaItem *meta = node->data;
-					switch (meta->type) {
-					case RZ_META_TYPE_DATA:
-					case RZ_META_TYPE_STRING:
-					case RZ_META_TYPE_HIDE:
-					case RZ_META_TYPE_FORMAT:
-					case RZ_META_TYPE_MAGIC:
-						skip = rz_meta_node_size(node);
-						goto do_skip;
-					default:
-						break;
-					}
+		RzPVector *metas = rz_meta_get_all_at(analysis, addr);
+		if (metas) {
+			void **it;
+			ut64 skip = 0;
+			rz_pvector_foreach (metas, it) {
+				RzIntervalNode *node = *it;
+				RzAnalysisMetaItem *meta = node->data;
+				switch (meta->type) {
+				case RZ_META_TYPE_DATA:
+				case RZ_META_TYPE_STRING:
+				case RZ_META_TYPE_HIDE:
+				case RZ_META_TYPE_FORMAT:
+				case RZ_META_TYPE_MAGIC:
+					skip = rz_meta_node_size(node);
+					goto do_skip;
+				default:
+					break;
 				}
-			do_skip:
-				rz_pvector_free(metas);
-				if (skip) {
-					ptr += skip;
-					addr += skip;
-					goto __next;
-				}
+			}
+		do_skip:
+			rz_pvector_free(metas);
+			if (skip) {
+				ptr += skip;
+				addr += skip;
+				goto __next;
 			}
 		}
 		if (!analysis->iob.is_valid_offset(analysis->iob.io, addr, RZ_PERM_X)) {
@@ -161,7 +159,6 @@ RZ_API RzList /*<RzAnalysisRefline *>*/ *rz_analysis_reflines_get(RzAnalysis *an
 
 		// This can segfault if opcode length and buffer check fails
 		rz_analysis_op_fini(&op);
-		rz_analysis_op_init(&op);
 		rz_analysis_op(analysis, &op, addr, ptr, (int)(end - ptr), RZ_ANALYSIS_OP_MASK_BASIC | RZ_ANALYSIS_OP_MASK_HINT);
 		sz = op.size;
 		if (sz <= 0) {
@@ -266,13 +263,13 @@ list_err:
 }
 
 RZ_API int rz_analysis_reflines_middle(RzAnalysis *a, RzList /*<RzAnalysisRefline *>*/ *list, ut64 addr, int len) {
-	if (a && list) {
-		RzAnalysisRefline *ref;
-		RzListIter *iter;
-		rz_list_foreach (list, iter, ref) {
-			if ((ref->to > addr) && (ref->to < addr + len)) {
-				return true;
-			}
+	if (!a || !list)
+		return false;
+	RzAnalysisRefline *ref;
+	RzListIter *iter;
+	rz_list_foreach (list, iter, ref) {
+		if ((ref->to > addr) && (ref->to < addr + len)) {
+			return true;
 		}
 	}
 	return false;
@@ -347,7 +344,7 @@ static inline bool refline_kept(RzAnalysisRefline *ref, bool middle_after, ut64 
 // TODO: this is TOO SLOW. do not iterate over all reflines
 RZ_API RzAnalysisRefStr *rz_analysis_reflines_str(void *_core, ut64 addr, int opts) {
 	RzCore *core = _core;
-	RzCons *cons = core->cons;
+	rz_return_val_if_fail(core && core->analysis && core->analysis->reflines, NULL);
 	RzAnalysis *analysis = core->analysis;
 	RzBuffer *b;
 	RzBuffer *c;
@@ -361,14 +358,12 @@ RZ_API RzAnalysisRefStr *rz_analysis_reflines_str(void *_core, ut64 addr, int op
 	char *str = NULL;
 	char *col_str = NULL;
 
-	rz_return_val_if_fail(cons && analysis && analysis->reflines, NULL);
-
 	RzList *lvls = rz_list_new();
 	if (!lvls) {
 		return NULL;
 	}
 	rz_list_foreach (analysis->reflines, iter, ref) {
-		if (core->cons && core->cons->context->breaked) {
+		if (rz_cons_is_breaked()) {
 			rz_list_free(lvls);
 			return NULL;
 		}
@@ -381,7 +376,7 @@ RZ_API RzAnalysisRefStr *rz_analysis_reflines_str(void *_core, ut64 addr, int op
 	rz_buf_append_string(c, " ");
 	rz_buf_append_string(b, " ");
 	rz_list_foreach (lvls, iter, ref) {
-		if (core->cons && core->cons->context->breaked) {
+		if (rz_cons_is_breaked()) {
 			rz_list_free(lvls);
 			rz_buf_free(b);
 			rz_buf_free(c);

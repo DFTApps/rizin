@@ -1668,7 +1668,7 @@ RZ_API void rz_analysis_fcn_vars_cache_fini(RzAnalysisFcnVarsCache *cache) {
 	rz_list_free(cache->arg_vars);
 }
 
-static char *sig_from_debuginfo(RzAnalysis *analysis, RZ_NONNULL RzAnalysisFunction *fcn, char *fcn_name, const char *fcn_name_pre, const char *fcn_name_post) {
+static char *sig_from_debuginfo(RzAnalysis *analysis, RZ_NONNULL RzAnalysisFunction *fcn, char *fcn_name) {
 	if (!fcn->has_debuginfo || !rz_str_startswith(fcn_name, "dbg."))
 		return NULL;
 
@@ -1697,7 +1697,7 @@ RZ_API char *rz_analysis_fcn_format_sig(RZ_NONNULL RzAnalysis *analysis, RZ_NONN
 		return NULL;
 	}
 
-	char *sig = sig_from_debuginfo(analysis, fcn, fcn_name, fcn_name_pre, fcn_name_post);
+	char *sig = sig_from_debuginfo(analysis, fcn, fcn_name);
 	if (RZ_STR_ISNOTEMPTY(sig)) {
 		return sig;
 	}
